@@ -10,7 +10,7 @@ app = FastAPI()
 # CONFIGURAÇÃO SUPABASE - VERIFIQUE COM ATENÇÃO
 # ====================================================
 # A URL deve ser algo como: https://xyzabc.supabase.co
-SUPABASE_URL = "https://supabase.com/dashboard/project/gbtvusyjolpautvyddvh"
+SUPABASE_URL = "https://gbtvusyjolpautvyddvh.supabase.co"
 SUPABASE_KEY = "sb_publishable_b1nsi_xHaSjm1BQbBToXIA_-6TaOtb5"
 
 try:
@@ -65,3 +65,4 @@ async def receber_log(payload: dict, x_api_key: str = Header(None)):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
