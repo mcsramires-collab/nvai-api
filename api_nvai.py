@@ -10,8 +10,8 @@ app = FastAPI(title="NVAI Enterprise API")
 # ====================================================
 # CONFIGURAÇÃO SUPABASE
 # ====================================================
-SUPABASE_URL = "SUA_URL_DO_SUPABASE" 
-SUPABASE_KEY = "SUA_PUBLISHABLE_ANON_KEY"
+SUPABASE_URL = "https://gbtvusyjolpautvyddvh.supabase.co"
+SUPABASE_KEY = "sb_publishable_b1nsi_xHaSjm1BQbBToXIA_-6TaOtb5"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def decodificar_chave(chave):
@@ -84,3 +84,4 @@ async def receber_log(payload: dict, x_api_key: str = Header(None)):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
