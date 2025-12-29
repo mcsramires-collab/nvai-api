@@ -1,63 +1,61 @@
 from fastapi import FastAPI, Header, HTTPException
 from supabase import create_client, Client
 import uvicorn
-import unicodedata
-import os
+import base64
 
 app = FastAPI()
 
-# ====================================================
-# CONFIGURAÇÃO SUPABASE - LIMPEZA AUTOMÁTICA
-# ====================================================
-# COLOQUE AQUI A URL QUE TERMINA EM .co
-RAW_URL = "https://gbtvusyjolpautvyddvh.supabase.co" 
-# Remove barras extras ou espaços que podem causar o erro 404
-SUPABASE_URL = RAW_URL.strip().rstrip('/')
-
+SUPABASE_URL = "https://gbtvusyjolpautvyddvh.supabase.co"
 SUPABASE_KEY = "sb_publishable_b1nsi_xHaSjm1BQbBToXIA_-6TaOtb5"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    print(f"❌ ERRO DE CONFIGURAÇÃO: {e}")
-
-def limpar_texto(texto):
-    if not texto: return "Ocioso"
-    nfkd = unicodedata.normalize('NFKD', str(texto))
-    return "".join(c for c in nfkd if not unicodedata.combining(c)).encode('ascii', 'ignore').decode('ascii')
+def decodificar_chave(chave):
+    try:
+        decoded = base64.b64decode(chave).decode('utf-8')
+        # Formato: NVAI|CNPJ|NIVEL|TIME
+        return decoded.split('|')
+    except:
+        return None
 
 @app.post("/enviar_log")
 async def receber_log(payload: dict, x_api_key: str = Header(None)):
-    try:
-        # Validação simples de segurança
-        if not x_api_key:
-            raise HTTPException(status_code=401, detail="Chave ausente")
+    info = decodificar_chave(x_api_key)
+    if not info or info[0] != "NVAI":
+        raise HTTPException(status_code=401, detail="Chave Invalida")
 
-        # Verifica se a empresa existe
-        empresa = supabase.table("empresas").select("id").eq("api_key", x_api_key).execute()
-        
-        if not empresa.data:
-            raise HTTPException(status_code=401, detail="Empresa nao cadastrada")
+    cnpj_empresa = info[1]
+    nivel = info[2] # MASTER, SUPER ou USER
 
-        # Prepara o registro para o banco
-        registro = {
-            "empresa_id": empresa.data[0]["id"],
-            "funcionario": limpar_texto(payload.get("funcionario")),
-            "equipe": limpar_texto(payload.get("equipe")),
-            "janela": limpar_texto(payload.get("janela")),
-            "cpu": float(payload.get("cpu", 0)),
-            "ram": float(payload.get("ram", 0)),
-            "ping": float(payload.get("ping", 0))
-        }
+    # Busca empresa e custo do funcionário
+    empresa = supabase.table("empresas").select("id").eq("cnpj", cnpj_empresa).execute()
+    if not empresa.data:
+        raise HTTPException(status_code=404, detail="Empresa nao encontrada")
+    
+    id_emp = empresa.data[0]["id"]
+    func_id = payload.get("funcionario")
 
-        # Insere na tabela 'logs'
-        supabase.table("logs").insert(registro).execute()
-        return {"status": "sucesso"}
+    # Busca config de custo (Salário/Horas)
+    config = supabase.table("configuracoes_usuarios").select("*").eq("empresa_id", id_emp).eq("funcionario_id", func_id).execute()
+    
+    custo_min = 0
+    if config.data:
+        # Cálculo: (Salário / Horas Mensais) / 60 min
+        custo_min = (config.data[0]['salario_mensal'] / config.data[0]['horas_mensais']) / 60
 
-    except Exception as e:
-        # Retorna o erro exato para o Agente ler no terminal
-        raise HTTPException(status_code=500, detail=str(e))
+    registro = {
+        "empresa_id": id_emp,
+        "funcionario": func_id,
+        "equipe": info[3] if len(info) > 3 else "Geral",
+        "janela": payload.get("janela"),
+        "cpu": payload.get("cpu"),
+        "ram": payload.get("ram"),
+        "ping": payload.get("ping"),
+        "custo_minuto": custo_min
+    }
+
+    supabase.table("logs").insert(registro).execute()
+    return {"status": "sucesso", "permissao": nivel}
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    import os
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
